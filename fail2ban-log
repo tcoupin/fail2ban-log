@@ -1,0 +1,93 @@
+#!/usr/bin/node
+var myarg = process.argv;
+myarg.splice(0,2);
+var file = myarg[0];
+if (file === undefined || file == "" ){
+	console.error("Usage : fail2ban-log FILE [oldGeoJson]");
+	process.exit(1);
+}
+
+console.error("Process file "+file);
+var oldGeoJson = myarg[1];
+if (oldGeoJson !== undefined){
+	console.error("Use old geojson : "+oldGeoJson);
+
+	var fs=require("fs");
+	oldGeoJson = JSON.parse(fs.readFileSync(oldGeoJson, 'utf8'));
+} else {
+	oldGeoJson = {};
+}
+
+var grep=require("simple-grep");
+var async=require("async");
+var request=require("request");
+var extend=require("extend");
+
+
+async.waterfall([
+	function(callback){
+		grep(" Ban ", file, function(list){callback(null,list);});
+	},
+	function(list,callback){
+		if (list.length== 0){
+			callback("Aucune ligne trouvée");
+			return;
+		}
+		async.map(list,
+			function(arr,cb){
+				async.map(arr.results,
+					function(line,cb2){
+						//line.line = 2016-02-02 20:03:12,519 fail2ban.actions: WARNING [ssh] Ban 202.83.23.49
+						var parts = line.line.split(" ");
+						//console.log(JSON.stringify(line))
+						//console.log(JSON.stringify(parts));
+						cb2(null,{date: parts[0], time: parts[1], ip: parts[6]});
+					},
+					cb
+				);
+			},
+			callback
+		);
+	},
+	function(resultsArr,callback){
+		var results = [];
+		async.eachSeries(resultsArr,
+			function(fileResult, callback){
+				results = results.concat(fileResult);
+				callback();
+			},
+			function(err){
+				callback(null, results);
+			});
+	},
+	function(items, callback){
+		async.map(items,
+			function(item, callback){
+				request.get("http://freegeoip.net/json/"+item.ip, function(err, resp, body){
+					if (err){
+						callback(err)
+					} else {
+						extend(item, JSON.parse(body));
+						callback()
+					}
+				})
+			},
+			function(err){
+				callback(err, items)
+			})
+	},
+	function(items, callback){
+		async.map(items,
+			function(item, callback){
+				callback(null,{type: "Feature",geometry: {type: "Point", coordinates: [item.longitude, item.latitude]}, properties: item});
+			},
+			function(err, features){
+				callback(null, extend(null,oldGeoJson,{type: "FeatureCollection", features: features}));
+			})
+	}
+],
+function(err, geojson){
+	if (err)
+		console.error("Error: "+JSON.stringify(err));
+	console.log(JSON.stringify(geojson));
+});

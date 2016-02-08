@@ -1,0 +1,17 @@
+{
+  "name": "fail2ban-log",
+  "version": "1.0.0",
+  "description": "",
+  "main": "fail2ban-log",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "thibault.coupin@gmail.com",
+  "license": "ISC",
+  "dependencies": {
+    "async": "^1.5.2",
+    "extend": "^3.0.0",
+    "request": "^2.69.0",
+    "simple-grep": "0.0.2"
+  }
+}
