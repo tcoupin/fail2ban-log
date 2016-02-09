@@ -26,7 +26,7 @@ var extend=require("extend");
 
 async.waterfall([
 	function(callback){
-		grep(" Ban ", file, function(list){callback(null,list);});
+		grep("' Ban '", file, function(list){callback(null,list);});
 	},
 	function(list,callback){
 		if (list.length== 0){
@@ -37,10 +37,7 @@ async.waterfall([
 			function(arr,cb){
 				async.map(arr.results,
 					function(line,cb2){
-						//line.line = 2016-02-02 20:03:12,519 fail2ban.actions: WARNING [ssh] Ban 202.83.23.49
 						var parts = line.line.split(" ");
-						//console.log(JSON.stringify(line))
-						//console.log(JSON.stringify(parts));
 						cb2(null,{date: parts[0], time: parts[1], ip: parts[6]});
 					},
 					cb
@@ -63,9 +60,12 @@ async.waterfall([
 	function(items, callback){
 		async.map(items,
 			function(item, callback){
+				console.error("Geoip:"+item.ip);
 				request.get("http://freegeoip.net/json/"+item.ip, function(err, resp, body){
 					if (err){
 						callback(err)
+					} else if (resp.statusCode != 200){
+						callback(item.ip+" : "+resp.body);
 					} else {
 						extend(item, JSON.parse(body));
 						callback()
