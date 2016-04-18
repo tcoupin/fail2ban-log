@@ -24,7 +24,22 @@ try {
 	console.log("Fail to parse fileout");
 	process.exit(1);
 }
+function hash(item){
+	return ""+item.properties.ip+item.properties.date+item.properties.time;
+}
 
 require('./src/fail2ban-log')(filein,function(err,newgeojson){
-	fs.writeFileSync(fileout,JSON.stringify({type: "FeatureCollection", features:geojson.features.concat(newgeojson.features)}),'utf8');
+	var index = [];
+	debugger;
+	for (var i in geojson.features){
+		index.push(hash(geojson.features[i]));
+	}
+	for (var i in newgeojson.features){
+		if (index.indexOf(hash(newgeojson.features[i]))!=-1){
+			console.log("Skip "+newgeojson.features[i].properties.ip);
+			continue;
+		}
+		geojson.features.push(newgeojson.features[i]);
+	}
+	fs.writeFileSync(fileout,JSON.stringify(geojson),'utf8');
 })
