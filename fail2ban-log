@@ -1,93 +1,30 @@
 #!/usr/bin/node
+var extend = require('extend');
+var fs=require("fs");
 var myarg = process.argv;
 myarg.splice(0,2);
-var file = myarg[0];
-if (file === undefined || file == "" ){
-	console.error("Usage : fail2ban-log FILE [oldGeoJson]");
+var filein = myarg[0];
+var fileout = myarg[1];
+if (filein === undefined || filein == "" || fileout === undefined || fileout == ""){
+	console.log("Usage : fail2ban-log FILEIN FILEOUT ");
+	process.exit(1);
+}
+console.log("File in "+filein);
+console.log("File out "+fileout);
+var geojson;
+try {
+	var content = fs.readFileSync(fileout, 'utf8');
+	if (content == "" || content === undefined){
+		console.log("Init geojson");
+		geojson = {type: "FeatureCollection", features: []};
+	} else {
+		geojson = JSON.parse(content);
+	}
+} catch (e) {
+	console.log("Fail to parse fileout");
 	process.exit(1);
 }
 
-console.error("Process file "+file);
-var oldGeoJson = myarg[1];
-if (oldGeoJson !== undefined){
-	console.error("Use old geojson : "+oldGeoJson);
-
-	var fs=require("fs");
-	oldGeoJson = JSON.parse(fs.readFileSync(oldGeoJson, 'utf8'));
-} else {
-	oldGeoJson = {};
-}
-
-var grep=require("simple-grep");
-var async=require("async");
-var request=require("request");
-var extend=require("extend");
-
-
-async.waterfall([
-	function(callback){
-		grep("' Ban '", file, function(list){callback(null,list);});
-	},
-	function(list,callback){
-		if (list.length== 0){
-			callback("Aucune ligne trouvée");
-			return;
-		}
-		async.map(list,
-			function(arr,cb){
-				async.map(arr.results,
-					function(line,cb2){
-						var parts = line.line.split(" ");
-						cb2(null,{date: parts[0], time: parts[1], ip: parts[6]});
-					},
-					cb
-				);
-			},
-			callback
-		);
-	},
-	function(resultsArr,callback){
-		var results = [];
-		async.eachSeries(resultsArr,
-			function(fileResult, callback){
-				results = results.concat(fileResult);
-				callback();
-			},
-			function(err){
-				callback(null, results);
-			});
-	},
-	function(items, callback){
-		async.map(items,
-			function(item, callback){
-				console.error("Geoip:"+item.ip);
-				request.get("http://freegeoip.net/json/"+item.ip, function(err, resp, body){
-					if (err){
-						callback(err)
-					} else if (resp.statusCode != 200){
-						callback(item.ip+" : "+resp.body);
-					} else {
-						extend(item, JSON.parse(body));
-						callback()
-					}
-				})
-			},
-			function(err){
-				callback(err, items)
-			})
-	},
-	function(items, callback){
-		async.map(items,
-			function(item, callback){
-				callback(null,{type: "Feature",geometry: {type: "Point", coordinates: [item.longitude, item.latitude]}, properties: item});
-			},
-			function(err, features){
-				callback(null, extend(null,oldGeoJson,{type: "FeatureCollection", features: features}));
-			})
-	}
-],
-function(err, geojson){
-	if (err)
-		console.error("Error: "+JSON.stringify(err));
-	console.log(JSON.stringify(geojson));
-});
+require('./src/fail2ban-log')(filein,function(err,newgeojson){
+	fs.writeFileSync(fileout,JSON.stringify({type: "FeatureCollection", features:geojson.features.concat(newgeojson.features)}),'utf8');
+})
